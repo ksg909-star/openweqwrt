@@ -137,6 +137,11 @@ jobs:
           echo 'CONFIG_SIGNATURE_CHECK=y' >> .config
           echo 'CONFIG_DEVEL=y' >> .config
           echo 'CONFIG_CCACHE=y' >> .config
+          # Tachyon 1.5.21: bundle dependencies missing from this firmware's
+          # signed aarch64_cortex-a73 and matching kernel feed.
+          for pkg in coreutils-base64 coreutils-timeout kmod-inet-diag curl bind-dig ip-full; do
+            echo "CONFIG_PACKAGE_$pkg=y" >> .config
+          done
           {
             echo "CONFIG_IMAGEOPT=y"
             echo "CONFIG_VERSIONOPT=y"
@@ -158,6 +163,12 @@ jobs:
           grep -q '^CONFIG_CCACHE=y' .config
           grep -q '^CONFIG_VERSION_DIST="Beam WRT"' .config
           grep -q '^CONFIG_VERSION_NUMBER="1.3.1-QWRT"' .config
+          for pkg in coreutils-base64 coreutils-timeout kmod-inet-diag curl bind-dig ip-full; do
+            grep -q "^CONFIG_PACKAGE_$pkg=y$" .config || {
+              echo "Package not available in pinned build: $pkg" >&2
+              exit 1
+            }
+          done
 
       - name: Cache toolchain and sources
         uses: actions/cache@v4
@@ -261,6 +272,34 @@ jobs:
           cp repo/profiles/qwrt/README.md out-qwrt/README.txt
           cp repo/source.buildinfo out-qwrt/source.buildinfo
           (cd out-qwrt && sha256sum xiaomi-be7000-qwrt-squashfs-sysupgrade.bin > sha256sums.txt)
+
+      - name: Prepare Tachyon dependencies artifact
+        run: |
+          set -eu
+          mkdir -p out-tachyon-deps
+          for pkg in coreutils-base64 coreutils-timeout kmod-inet-diag curl bind-dig ip-full; do
+            # Fail closed if a package was not built from this exact source tree.
+            candidates="$(find owrt/bin/packages owrt/bin/targets -type f -name "$pkg-[0-9]*.apk" -print)"
+            count="$(printf '%s\n' "$candidates" | sed '/^$/d' | wc -l)"
+            if [ "$count" -ne 1 ]; then
+              echo "Expected exactly one APK for $pkg; got $count" >&2
+              exit 1
+            fi
+            cp "$candidates" out-tachyon-deps/
+          done
+          # Never install a kernel module without verifying exact vermagic.
+          cat owrt/build_dir/target-*/linux-*/linux-*/.vermagic > out-tachyon-deps/kernel-vermagic.txt
+          echo "$OWRT_COMMIT" > out-tachyon-deps/source-commit.txt
+          (cd out-tachyon-deps && sha256sum ./*.apk > SHA256SUMS)
+          echo "VERIFY MATCHING KERNEL VERMAGIC BEFORE INSTALLING kmod-inet-diag" > out-tachyon-deps/README.txt
+
+      - name: Upload Tachyon dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: be7000-tachyon-deps-${{ github.run_number }}
+          path: out-tachyon-deps/*
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload sysupgrade artifact
         uses: actions/upload-artifact@v4
