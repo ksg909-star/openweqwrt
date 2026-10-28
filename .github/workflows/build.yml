@@ -139,7 +139,10 @@ jobs:
           echo 'CONFIG_CCACHE=y' >> .config
           # Tachyon 1.5.21: bundle dependencies missing from this firmware's
           # signed aarch64_cortex-a73 and matching kernel feed.
-          for pkg in coreutils-base64 coreutils-timeout kmod-inet-diag curl bind-dig ip-full; do
+          # Baseline kernel ABI probe: leave INET_DIAG disabled to reproduce
+          # the running firmware kernel identity before building any modules.
+          # This run intentionally does not publish Tachyon dependency APKs.
+          for pkg in coreutils-base64 coreutils-timeout curl bind-dig ip-full; do
             echo "CONFIG_PACKAGE_$pkg=y" >> .config
           done
           {
@@ -163,7 +166,7 @@ jobs:
           grep -q '^CONFIG_CCACHE=y' .config
           grep -q '^CONFIG_VERSION_DIST="Beam WRT"' .config
           grep -q '^CONFIG_VERSION_NUMBER="1.3.1-QWRT"' .config
-          for pkg in coreutils-base64 coreutils-timeout kmod-inet-diag curl bind-dig ip-full; do
+          for pkg in coreutils-base64 coreutils-timeout curl bind-dig ip-full; do
             grep -q "^CONFIG_PACKAGE_$pkg=y$" .config || {
               echo "Package not available in pinned build: $pkg" >&2
               exit 1
@@ -211,7 +214,7 @@ jobs:
           cp owrt/.config out-kernel-diagnostics/openwrt-config.txt
           find owrt/build_dir/target-* -path '*/linux-*/linux-*/.config' -exec cp '{}' out-kernel-diagnostics/kernel-config.txt \; -quit
           if [ "$actual" != "$expected" ]; then
-            echo "::error::BE7000 kernel mismatch: running=$expected built=$actual. Refusing to publish incompatible module."
+            echo "::error::Baseline BE7000 kernel mismatch: running=$expected built=$actual. Refusing to publish incompatible module."
             exit 1
           fi
           echo "BE7000 kernel identity matches; package may proceed."
