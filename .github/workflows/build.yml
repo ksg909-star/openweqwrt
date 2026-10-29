@@ -139,9 +139,8 @@ jobs:
           echo 'CONFIG_CCACHE=y' >> .config
           # Tachyon 1.5.21: bundle dependencies missing from this firmware's
           # signed aarch64_cortex-a73 and matching kernel feed.
-          # Baseline kernel ABI probe: leave INET_DIAG disabled to reproduce
-          # the running firmware kernel identity before building any modules.
-          # This run intentionally does not publish Tachyon dependency APKs.
+          # Keep the running firmware kernel ABI: do not select kmod-inet-diag
+          # in this compatibility build. It requires a separate kernel plan.
           for pkg in coreutils-base64 coreutils-timeout curl bind-dig ip-full; do
             echo "CONFIG_PACKAGE_$pkg=y" >> .config
           done
@@ -305,7 +304,7 @@ jobs:
         run: |
           set -eu
           mkdir -p out-tachyon-deps
-          for pkg in coreutils-base64 coreutils-timeout kmod-inet-diag curl bind-dig ip-full; do
+          for pkg in coreutils-base64 coreutils-timeout curl bind-dig ip-full; do
             # Fail closed if a package was not built from this exact source tree.
             candidates="$(find owrt/bin/packages owrt/bin/targets -type f -name "$pkg-[0-9]*.apk" -print)"
             count="$(printf '%s\n' "$candidates" | sed '/^$/d' | wc -l)"
@@ -319,7 +318,7 @@ jobs:
           cat owrt/build_dir/target-*/linux-*/linux-*/.vermagic > out-tachyon-deps/kernel-vermagic.txt
           echo "$OWRT_COMMIT" > out-tachyon-deps/source-commit.txt
           (cd out-tachyon-deps && sha256sum ./*.apk > SHA256SUMS)
-          echo "VERIFY MATCHING KERNEL VERMAGIC BEFORE INSTALLING kmod-inet-diag" > out-tachyon-deps/README.txt
+          echo "USERSPACE DEPENDENCIES ONLY: kmod-inet-diag is NOT included. Do not install a module from a different kernel build. Tachyon itself is NOT ready." > out-tachyon-deps/README.txt
 
       - name: Upload Tachyon dependencies
         uses: actions/upload-artifact@v4
